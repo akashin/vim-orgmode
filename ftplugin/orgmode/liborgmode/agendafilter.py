@@ -81,6 +81,9 @@ def contains_active_todo(heading):
 		active.extend(act[0])
 	return heading.todo in active
 
+def contains_next_todo(heading):
+    return heading.todo in ['NEXT', 'DOING']
+
 
 def contains_active_date(heading):
 	u"""

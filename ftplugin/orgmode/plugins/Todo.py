@@ -149,15 +149,18 @@ class Todo(object):
 	@repeat
 	@apply_count
 	def toggle_todo_state(
-		cls, direction=Direction.FORWARD, interactive=False, next_set=False):
+		cls, direction=Direction.FORWARD, interactive=False, next_set=False,
+		document=None, position=None):
 		u""" Toggle state of TODO item
 
 		:returns: The changed heading
 		"""
-		d = ORGMODE.get_document(allow_dirty=True)
+		if document is None:
+		    document = ORGMODE.get_document(allow_dirty=True)
+		d = document
 
 		# get heading
-		heading = d.find_current_heading()
+		heading = d.find_current_heading(position=position)
 		if not heading:
 			vim.eval(u'feedkeys("^", "n")')
 			return
@@ -197,7 +200,7 @@ class Todo(object):
 				current_state, todo_states, direction=direction,
 				next_set=next_set)
 
-			cls.set_todo_state(new_state)
+			cls.set_todo_state(new_state, document=d, position=position)
 
 		# plug
 		plug = u'OrgTodoForward'
@@ -207,15 +210,17 @@ class Todo(object):
 		return plug
 
 	@classmethod
-	def set_todo_state(cls, state):
+	def set_todo_state(cls, state, document=None, position=None):
 		u""" Set todo state for buffer.
 
 		:bufnr:		Number of buffer the todo state should be updated for
 		:state:		The new todo state
 		"""
 		lineno, colno = vim.current.window.cursor
-		d = ORGMODE.get_document(allow_dirty=True)
-		heading = d.find_current_heading()
+		if document is None:
+		    document = ORGMODE.get_document(allow_dirty=True)
+		d = document
+		heading = d.find_current_heading(position=position)
 
 		if not heading:
 			return

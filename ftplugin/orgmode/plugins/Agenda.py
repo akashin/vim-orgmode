@@ -40,7 +40,7 @@ class Agenda(object):
 	@classmethod
 	def _switch_to(cls, bufname, vim_commands=None):
 		u"""
-		Swicht to the buffer with bufname.
+		Switch to the buffer with bufname.
 
 		A list of vim.commands (if given) gets executed as well.
 
@@ -49,7 +49,7 @@ class Agenda(object):
 		quite a few ways to open buffers in vimorgmode.
 		"""
 		cmds = [
-			u'botright split org:%s' % bufname,
+			u'botright 10split org:%s' % bufname,
 			u'setlocal buftype=nofile',
 			u'setlocal modifiable',
 			u'setlocal nonumber',
@@ -57,6 +57,7 @@ class Agenda(object):
 			u'nnoremap <silent> <buffer> <CR> :exec "%s ORGMODE.plugins[u\'Agenda\'].opendoc()"<CR>' % VIM_PY_CALL,
 			u'nnoremap <silent> <buffer> <TAB> :exec "%s ORGMODE.plugins[u\'Agenda\'].opendoc(switch=True)"<CR>' % VIM_PY_CALL,
 			u'nnoremap <silent> <buffer> <S-CR> :exec "%s ORGMODE.plugins[u\'Agenda\'].opendoc(split=True)"<CR>' % VIM_PY_CALL,
+			u'nnoremap <silent> <buffer> <localleader>ct :exec "%s ORGMODE.plugins[u\'Agenda\'].cycle()"<CR>' % VIM_PY_CALL,
 			# statusline
 			u'setlocal statusline=Org\\ %s' % bufname]
 		if vim_commands:
@@ -126,7 +127,7 @@ class Agenda(object):
 			bufnr = get_bufnumber(bufname)
 			tmp = cls.line2doc[row]
 			cls.line2doc[bufnr] = tmp
-			# delete old endry
+			# delete old entry
 			del cls.line2doc[row]
 
 		if split:
@@ -137,6 +138,34 @@ class Agenda(object):
 		else:
 			vim.command(u_encode(u"buffer %s" % bufnr))
 		vim.command(u_encode(u"normal! %dgg <CR>" % (destrow + 1)))
+
+	@classmethod
+	def cycle(cls):
+		u"""
+		Cycles highlighted agenda item.
+		"""
+		row, _ = vim.current.window.cursor
+		try:
+			bufname, bufnr, destrow = cls.line2doc[row]
+		except:
+			return
+
+		# reload source file if it is not loaded
+		if get_bufname(bufnr) is None:
+			vim.command(u_encode(u'badd %s' % bufname))
+			bufnr = get_bufnumber(bufname)
+			tmp = cls.line2doc[row]
+			cls.line2doc[bufnr] = tmp
+			# delete old entry
+			del cls.line2doc[row]
+
+		doc = ORGMODE.get_document(bufnr=bufnr)
+		ORGMODE.plugins['Todo'].toggle_todo_state(document=doc, position=destrow)
+		h = doc.find_current_heading(position=destrow)
+		vim.current.buffer.options['modifiable'] = True
+		todo_line = vim.current.buffer[row - 1]
+		vim.current.buffer[row - 1] = h.todo + todo_line[todo_line.index(' '):]
+		vim.current.buffer.options['modifiable'] = False
 
 	@classmethod
 	def list_next_week(cls):
@@ -166,7 +195,7 @@ class Agenda(object):
 		cmd = [u'setlocal filetype=orgagenda', ]
 		cls._switch_to(u'AGENDA', cmd)
 
-		# line2doc is a dic with the mapping:
+		# line2doc is a dict with the mapping:
 		#     line in agenda buffer --> source document
 		# It's easy to jump to the right document this way
 		cls.line2doc = {}
@@ -269,6 +298,33 @@ class Agenda(object):
 		vim.current.buffer[:] = [u_encode(i) for i in final_agenda]
 		vim.command(u_encode(u'setlocal nomodifiable conceallevel=2 concealcursor=nc'))
 
+	@classmethod
+	def list_next_todos(cls):
+	    agenda_documents = cls._get_agendadocuments()
+	    if not agenda_documents:
+		    return
+	    cls.list_next_todos_for(agenda_documents)
+
+	@classmethod
+	def list_next_todos_for(cls, agenda_documents):
+	    raw_agenda = ORGMODE.agenda_manager.get_next_todos(agenda_documents)
+
+	    cls.line2doc = {}
+	    # create buffer at bottom
+	    cmd = [u'setlocal filetype=orgagenda']
+	    cls._switch_to(u'AGENDA', cmd)
+
+	    # format text of agenda
+	    final_agenda = []
+	    for i, h in enumerate(raw_agenda):
+		    tmp = u"%s %s: %s" % (h.todo, h.parent.title, h.title)
+		    final_agenda.append(tmp)
+		    cls.line2doc[len(final_agenda)] = (get_bufname(h.document.bufnr), h.document.bufnr, h.start)
+
+	    # show agenda
+	    vim.current.buffer[:] = [u_encode(i) for i in final_agenda]
+	    vim.command(u_encode(u'setlocal nomodifiable  conceallevel=2 concealcursor=nc'))
+
 	def register(self):
 		u"""
 		Registration of the plugin.
@@ -310,5 +366,11 @@ class Agenda(object):
 			key_mapping=u'<localleader>caL',
 			menu_desrc=u'Timeline for this buffer'
 		)
-
+		add_cmd_mapping_menu(
+			self,
+			name=u'OrgAgendaNext',
+			function=u'%s ORGMODE.plugins[u"Agenda"].list_next_todos()' % VIM_PY_CALL,
+			key_mapping=u'<Leader>A',
+			menu_desrc=u'Agenda of next TODOs'
+		)
 # vim: set noexpandtab:
